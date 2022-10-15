@@ -58,8 +58,10 @@ class PSPNet(nn.Module):
         deep_features_size=1024,
         backend="resnet34",
         pretrained=True,
+        classifification=True,
     ):
         super().__init__()
+        self.classifification = classifification
         self.feats = getattr(extractors, backend)(pretrained)
         self.psp = PSPModule(psp_size, 1024, sizes)
         self.drop_1 = nn.Dropout2d(p=0.3)
@@ -72,10 +74,10 @@ class PSPNet(nn.Module):
         self.final = nn.Sequential(
             nn.Conv2d(64, n_classes, kernel_size=1), nn.LogSoftmax(dim=1)
         )
-
-        self.classifier = nn.Sequential(
-            nn.Linear(deep_features_size, 256), nn.ReLU(), nn.Linear(256, n_classes)
-        )
+        if self.classifification:
+            self.classifier = nn.Sequential(
+                nn.Linear(deep_features_size, 256), nn.ReLU(), nn.Linear(256, n_classes)
+            )
 
     def forward(self, x):
         f, class_f = self.feats(x)
@@ -91,8 +93,10 @@ class PSPNet(nn.Module):
         p = self.up_3(p)
         p = self.drop_2(p)
 
-        auxiliary = F.adaptive_max_pool2d(input=class_f, output_size=(1, 1)).view(
-            -1, class_f.size(1)
-        )
-
-        return self.final(p), self.classifier(auxiliary)
+        if self.classifification:
+            auxiliary = F.adaptive_max_pool2d(input=class_f, output_size=(1, 1)).view(
+                -1, class_f.size(1)
+            )
+            return self.final(p), self.classifier(auxiliary)
+        else:
+            return self.final(p)
